@@ -1,0 +1,144 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    border-radius: 0 !important;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    width: 100%;
+    background-color: #000000;
+    color: #FFFFFF;
+    font-family: 'Roboto Mono', 'Consolas', 'Courier New', monospace;
+    overflow: hidden;
+  }
+
+  #root {
+    height: 100vh;
+    width: 100vw;
+    background-color: #000000;
+  }
+}
+
+@layer components {
+  .terminal-cursor {
+    display: inline-block;
+    width: 0.6em;
+    height: 1em;
+    background-color: #FF9800;
+    animation: blink 1s infinite;
+    margin-left: 2px;
+    vertical-align: baseline;
+  }
+
+  @keyframes blink {
+    0%, 49% {
+      opacity: 1;
+    }
+    50%, 100% {
+      opacity: 0;
+    }
+  }
+
+  .bloomberg-border {
+    border: 1px solid #333333;
+  }
+
+  .bloomberg-border-amber {
+    border: 1px solid #FF9800;
+  }
+
+  .bloomberg-text-amber {
+    color: #FF9800;
+  }
+
+  .bloomberg-bg-black {
+    background-color: #000000;
+  }
+
+  .bloomberg-bg-amber {
+    background-color: #FF9800;
+  }
+}
+
+/* React Grid Layout Bloomberg Theme */
+.react-grid-layout {
+  background-color: #000000;
+}
+
+.react-grid-item {
+  border-radius: 0 !important;
+}
+
+.react-grid-item > .react-resizable-handle {
+  border-radius: 0 !important;
+  opacity: 0.8;
+  transition: opacity 0.2s;
+}
+
+.react-grid-item:hover > .react-resizable-handle {
+  opacity: 1;
+}
+
+.react-grid-item > .react-resizable-handle::after {
+  border-color: #FF9800;
+  border-width: 2px;
+  width: 8px;
+  height: 8px;
+}
+
+.react-resizable-handle {
+  border-radius: 0 !important;
+  background-color: transparent;
+}
+
+/* Resize handle positions - Bloomberg Terminal styling */
+.react-resizable-handle-se {
+  bottom: 0;
+  right: 0;
+  cursor: se-resize;
+}
+
+.react-resizable-handle-s {
+  bottom: 0;
+  cursor: s-resize;
+}
+
+.react-resizable-handle-e {
+  right: 0;
+  cursor: e-resize;
+}
+
+.react-resizable-handle-sw {
+  bottom: 0;
+  left: 0;
+  cursor: sw-resize;
+}
+
+.react-resizable-handle-w {
+  left: 0;
+  cursor: w-resize;
+}
+
+.react-resizable-handle-nw {
+  top: 0;
+  left: 0;
+  cursor: nw-resize;
+}
+
+.react-resizable-handle-n {
+  top: 0;
+  cursor: n-resize;
+}
+
+.react-resizable-handle-ne {
+  top: 0;
+  right: 0;
+  cursor: ne-resize;
+}
+
