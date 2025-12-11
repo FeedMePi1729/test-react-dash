@@ -1,5 +1,5 @@
 export interface ParsedCommand {
-  type: 'LOAD' | 'NEW_TAB' | 'CLOSE_TAB' | 'MARKET_VIEW' | 'SETTINGS' | 'HELP' | 'UNKNOWN';
+  type: 'LOAD' | 'NEW_TAB' | 'CLOSE_TAB' | 'MARKET_VIEW' | 'SETTINGS' | 'HELP' | 'SAVE' | 'LOAD_VIEW' | 'LIST_VIEWS' | 'UNKNOWN';
   args: string[];
   raw: string;
 }
@@ -12,11 +12,34 @@ export const parseCommand = (input: string): ParsedCommand => {
 
   switch (command) {
     case 'LOAD':
+      // Check if it's "LOAD VIEW" (two-word command)
+      if (parts[1] === 'VIEW') {
+        return {
+          type: 'LOAD_VIEW',
+          args: parts.slice(2),
+          raw: input,
+        };
+      }
       return {
         type: 'LOAD',
         args,
         raw: input,
       };
+    case 'SAVE':
+      return {
+        type: 'SAVE',
+        args: parts.slice(1),
+        raw: input,
+      };
+    case 'LIST':
+      if (parts[1] === 'VIEWS') {
+        return {
+          type: 'LIST_VIEWS',
+          args: [],
+          raw: input,
+        };
+      }
+      break;
     case 'NEW':
       if (parts[1] === 'TAB') {
         return {
@@ -65,7 +88,7 @@ export const parseCommand = (input: string): ParsedCommand => {
   };
 };
 
-export const getCommandSuggestions = (input: string, appNames: string[] = []): string[] => {
+export const getCommandSuggestions = (input: string, appNames: string[] = [], savedViews: string[] = []): string[] => {
   const trimmed = input.trim().toUpperCase();
   const commands = [
     'LOAD',
@@ -74,10 +97,17 @@ export const getCommandSuggestions = (input: string, appNames: string[] = []): s
     'MARKET VIEW',
     'SETTINGS',
     'HELP',
+    'SAVE',
+    'LOAD VIEW',
+    'LIST VIEWS',
   ];
 
-  // If input starts with "LOAD" or is empty, include app names
-  const shouldIncludeApps = !trimmed || trimmed.startsWith('LOAD');
+  // Check if user is typing "LOAD VIEW"
+  const isLoadView = trimmed.startsWith('LOAD VIEW');
+  const loadViewPrefix = isLoadView ? trimmed.substring(9).trim() : '';
+  
+  // If input starts with "LOAD" or is empty, include app names (but not if it's "LOAD VIEW")
+  const shouldIncludeApps = (!trimmed || trimmed.startsWith('LOAD')) && !isLoadView;
   
   let allSuggestions: string[] = [];
   
@@ -97,8 +127,21 @@ export const getCommandSuggestions = (input: string, appNames: string[] = []): s
   
   allSuggestions = [...matchingCommands];
   
+  // If user is typing "LOAD VIEW", show saved view suggestions
+  if (isLoadView) {
+    if (loadViewPrefix) {
+      // User is typing after "LOAD VIEW" - suggest matching view names
+      const matchingViews = savedViews
+        .filter(view => view.toUpperCase().startsWith(loadViewPrefix) || view.toUpperCase().includes(loadViewPrefix))
+        .map(view => `LOAD VIEW ${view}`);
+      allSuggestions.push(...matchingViews);
+    } else {
+      // User typed "LOAD VIEW" - show all saved views
+      allSuggestions.push(...savedViews.map(view => `LOAD VIEW ${view}`));
+    }
+  }
   // If user typed "LOAD" or starts typing an app name, include app suggestions
-  if (shouldIncludeApps) {
+  else if (shouldIncludeApps) {
     const loadPrefix = trimmed.startsWith('LOAD') ? trimmed.substring(4).trim() : trimmed;
     
     if (loadPrefix) {

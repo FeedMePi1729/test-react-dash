@@ -78,13 +78,18 @@ export const AppContainer = ({ children, layouts, onLayoutChange, onDrop, draggi
 interface GridItemProps {
   id: string;
   children: ReactNode;
+  appName?: string;
+  isMinimized?: boolean;
   onDragStart?: (e: React.DragEvent, appId: string) => void;
   onDragEnd?: () => void;
+  onMinimize?: (appId: string) => void;
+  onMaximize?: (appId: string) => void;
+  onClose?: (appId: string) => void;
 }
 
 // Use forwardRef so react-grid-layout can attach refs for drag/resize functionality
 export const GridItem = forwardRef<HTMLDivElement, GridItemProps>(
-  ({ id, children, onDragStart, onDragEnd, ...rest }, ref) => {
+  ({ id, children, appName, isMinimized = false, onDragStart, onDragEnd, onMinimize, onMaximize, onClose, ...rest }, ref) => {
     const handleDragStart = (e: React.DragEvent) => {
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('application/app-id', id);
@@ -114,21 +119,90 @@ export const GridItem = forwardRef<HTMLDivElement, GridItemProps>(
       }
     };
 
+    const handleMinimize = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      if (onMinimize) {
+        onMinimize(id);
+      }
+    };
+
+    const handleMaximize = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      if (onMaximize) {
+        onMaximize(id);
+      }
+    };
+
+    const handleClose = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      if (onClose) {
+        onClose(id);
+      }
+    };
+
+    const handleButtonMouseDown = (e: React.MouseEvent) => {
+      // Prevent drag from starting when clicking the button
+      e.stopPropagation();
+      e.preventDefault();
+    };
+
+    const handleDragStartWithCheck = (e: React.DragEvent) => {
+      // Don't start drag if clicking on the minimize button
+      const target = e.target as HTMLElement;
+      if (target.closest('button')) {
+        e.preventDefault();
+        return;
+      }
+      handleDragStart(e);
+    };
+
     return (
       <div
         ref={ref}
-        className="bloomberg-border bloomberg-border-amber bloomberg-bg-black h-full w-full overflow-hidden"
+        className="bloomberg-border bloomberg-border-amber bloomberg-bg-black h-full w-full overflow-hidden flex flex-col"
         draggable
-        onDragStart={handleDragStart}
+        onDragStart={handleDragStartWithCheck}
         onDragEnd={handleDragEnd}
         {...rest}
       >
-        <div className="drag-handle h-6 flex items-center px-2 bloomberg-border-b bloomberg-border-amber cursor-move">
-          <span className="text-bloomberg-amber font-mono text-xs">≡</span>
+        <div className="drag-handle h-6 flex items-center justify-between px-2 bloomberg-border-b bloomberg-border-amber cursor-move">
+          <div className="flex items-center gap-2 flex-1">
+            <span className="text-bloomberg-amber font-mono text-xs">≡</span>
+            {appName && (
+              <span className="text-bloomberg-amber font-mono text-xs">{appName}</span>
+            )}
+          </div>
+          <div className="flex items-center">
+            <button
+              onClick={isMinimized ? handleMaximize : handleMinimize}
+              onMouseDown={handleButtonMouseDown}
+              className="text-bloomberg-amber hover:text-white font-mono text-sm px-2 py-1 transition-colors min-w-[28px] flex items-center justify-center cursor-pointer"
+              style={{ pointerEvents: 'auto', userSelect: 'none' }}
+              title={isMinimized ? 'Maximize' : 'Minimize'}
+            >
+              {isMinimized ? '□' : '−'}
+            </button>
+            {onClose && (
+              <button
+                onClick={handleClose}
+                onMouseDown={handleButtonMouseDown}
+                className="text-bloomberg-amber hover:text-red-500 font-mono text-sm px-2 py-1 transition-colors min-w-[28px] flex items-center justify-center cursor-pointer"
+                style={{ pointerEvents: 'auto', userSelect: 'none' }}
+                title="Close"
+              >
+                ×
+              </button>
+            )}
+          </div>
         </div>
-        <div className="h-[calc(100%-1.5rem)] overflow-auto">
-          {children}
-        </div>
+        {!isMinimized && (
+          <div className="flex-1 overflow-auto">
+            {children}
+          </div>
+        )}
       </div>
     );
   }

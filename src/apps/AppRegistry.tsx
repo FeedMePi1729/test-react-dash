@@ -811,6 +811,185 @@ const SettingsApp = () => {
   );
 };
 
+const NewsApp = () => {
+  const [articles, setArticles] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Fetch BBC News RSS feed (using a CORS proxy or direct RSS parsing)
+    const fetchNews = async () => {
+      try {
+        setLoading(true);
+        // Using RSS2JSON or similar service, or we can parse RSS directly
+        // For now, let's use a CORS proxy to fetch BBC RSS
+        const rssUrl = 'https://feeds.bbci.co.uk/news/rss.xml';
+        const proxyUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}`;
+        
+        const response = await fetch(proxyUrl);
+        if (!response.ok) {
+          throw new Error('Failed to fetch news');
+        }
+        
+        const data = await response.json();
+        if (data.status === 'ok' && data.items) {
+          setArticles(data.items.slice(0, 20)); // Get top 20 articles
+        } else {
+          throw new Error('Invalid response format');
+        }
+      } catch (err) {
+        console.error('Error fetching news:', err);
+        setError('Failed to load news. Please try again later.');
+        // Fallback: create some mock articles with links to BBC
+        setArticles([
+          {
+            title: 'BBC News - Home',
+            link: 'https://www.bbc.com/news',
+            pubDate: new Date().toISOString(),
+            description: 'Visit BBC News for the latest headlines',
+          },
+        ]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchNews();
+  }, []);
+
+  return (
+    <div className="h-full w-full bloomberg-bg-black overflow-auto flex flex-col">
+      <div className="bloomberg-border-b bloomberg-border-amber p-3 flex items-center justify-between sticky top-0 bg-black z-10">
+        <h2 className="text-bloomberg-amber text-lg font-mono">BBC NEWS</h2>
+        <a
+          href="https://www.bbc.com/news"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-bloomberg-amber text-xs font-mono hover:underline"
+        >
+          Open BBC News ↗
+        </a>
+      </div>
+
+      <div className="p-4">
+        {loading && (
+          <div className="text-bloomberg-amber text-sm font-mono text-center py-8">
+            Loading news...
+          </div>
+        )}
+
+        {error && (
+          <div className="text-red-500 text-sm font-mono mb-4 p-3 bloomberg-border bloomberg-border-amber">
+            {error}
+          </div>
+        )}
+
+        {!loading && articles.length > 0 && (
+          <div className="space-y-3">
+            {articles.map((article, index) => (
+              <div
+                key={index}
+                className="bloomberg-border bloomberg-border-amber p-3 hover:bg-opacity-10 hover:bg-bloomberg-amber transition-colors"
+              >
+                <a
+                  href={article.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block"
+                >
+                  <h3 className="text-bloomberg-amber text-sm font-mono font-bold mb-2 hover:underline">
+                    {article.title}
+                  </h3>
+                  {article.description && (
+                    <p className="text-white text-xs font-mono mb-2 line-clamp-2">
+                      {article.description.replace(/<[^>]*>/g, '').substring(0, 200)}...
+                    </p>
+                  )}
+                  {article.pubDate && (
+                    <p className="text-white text-xs font-mono opacity-70">
+                      {new Date(article.pubDate).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </p>
+                  )}
+                </a>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const ViewsApp = () => {
+  const [views, setViews] = useState<string[]>([]);
+
+  useEffect(() => {
+    // List all saved views from localStorage
+    const loadViews = () => {
+      const savedViews: string[] = [];
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('dashboard-view-')) {
+            const viewName = key.replace('dashboard-view-', '');
+            savedViews.push(viewName);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to list views:', e);
+      }
+      setViews(savedViews.sort());
+    };
+
+    loadViews();
+    // Refresh list when storage changes (in case user saves/loads from another tab)
+    const handleStorageChange = () => loadViews();
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  return (
+    <div className="p-4 h-full w-full overflow-auto bloomberg-bg-black">
+      <h2 className="text-bloomberg-amber text-lg mb-4 font-mono">SAVED VIEWS</h2>
+      
+      {views.length === 0 ? (
+        <div className="bloomberg-border bloomberg-border-amber p-4">
+          <p className="text-white text-sm font-mono">No saved views</p>
+          <p className="text-bloomberg-amber text-xs font-mono mt-2">
+            Use "SAVE [view_name]" to save the current tab as a view
+          </p>
+        </div>
+      ) : (
+        <div className="bloomberg-border bloomberg-border-amber p-4">
+          <p className="text-bloomberg-amber text-sm font-mono mb-3">
+            Saved views ({views.length}):
+          </p>
+          <div className="space-y-1">
+            {views.map((view, index) => (
+              <div 
+                key={view} 
+                className="text-white text-xs font-mono py-1 px-2 hover:bg-bloomberg-amber hover:text-black transition-colors"
+              >
+                <span className="text-bloomberg-amber mr-2">{index + 1}.</span>
+                {view}
+              </div>
+            ))}
+          </div>
+          <p className="text-bloomberg-amber text-xs font-mono mt-4">
+            Use "LOAD VIEW [view_name]" to load a saved view
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const HelpApp = () => {
   const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
   const cmdKey = isMac ? 'Cmd' : 'Ctrl';
@@ -847,6 +1026,18 @@ const HelpApp = () => {
             <div className="flex">
               <span className="text-bloomberg-amber w-32 flex-shrink-0">HELP</span>
               <span className="text-white">Show this help message</span>
+            </div>
+            <div className="flex">
+              <span className="text-bloomberg-amber w-32 flex-shrink-0">SAVE [view_name]</span>
+              <span className="text-white">Save current tab as a view</span>
+            </div>
+            <div className="flex">
+              <span className="text-bloomberg-amber w-32 flex-shrink-0">LOAD VIEW [view_name]</span>
+              <span className="text-white">Load a saved view into current tab</span>
+            </div>
+            <div className="flex">
+              <span className="text-bloomberg-amber w-32 flex-shrink-0">LIST VIEWS</span>
+              <span className="text-white">List all saved views</span>
             </div>
           </div>
         </div>
@@ -958,6 +1149,20 @@ class AppRegistry {
       name: 'Help',
       component: HelpApp,
       description: 'Command reference and keyboard shortcuts',
+    });
+
+    this.register({
+      id: 'news',
+      name: 'News',
+      component: NewsApp,
+      description: 'BBC News front page',
+    });
+
+    this.register({
+      id: 'views',
+      name: 'Views',
+      component: ViewsApp,
+      description: 'List and manage saved views',
     });
   }
 

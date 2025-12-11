@@ -12,6 +12,36 @@ interface TabWithApps extends Tab {
   layouts: Layout[];
 }
 
+interface SavedTabData {
+  name: string;
+  appInstances: AppInstance[];
+  layouts: Layout[];
+  minimizedAppIds: string[];
+}
+
+// Storage utilities for saved views
+const saveView = (viewName: string, tabData: SavedTabData): void => {
+  const key = `dashboard-view-${viewName}`;
+  try {
+    localStorage.setItem(key, JSON.stringify(tabData));
+  } catch (e) {
+    console.error('Failed to save view:', e);
+  }
+};
+
+const loadView = (viewName: string): SavedTabData | null => {
+  const key = `dashboard-view-${viewName}`;
+  try {
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      return JSON.parse(stored) as SavedTabData;
+    }
+  } catch (e) {
+    console.error('Failed to load view:', e);
+  }
+  return null;
+};
+
 // Parse popout data once, outside component to avoid StrictMode double-invocation issues
 const parsePopoutData = (): { tabs: TabWithApps[]; activeTabId: string; popoutKey: string | null } => {
   const urlParams = new URLSearchParams(window.location.search);
@@ -58,6 +88,8 @@ const initialData = parsePopoutData();
 function App() {
   const [tabs, setTabs] = useState<TabWithApps[]>(initialData.tabs);
   const [activeTabId, setActiveTabId] = useState<string>(initialData.activeTabId);
+  const [minimizedApps, setMinimizedApps] = useState<Set<string>>(new Set());
+  const [isLayoutLocked, setIsLayoutLocked] = useState(false);
   
   // Clean up localStorage and URL after component mounts (only once)
   // Also initialize font size from localStorage
@@ -95,19 +127,48 @@ function App() {
     return tabs.find(t => t.id === activeTabId) || tabs[0];
   }, [tabs, activeTabId]);
 
-  // Calculate full-screen layout for a single app
-  // Each tab can only have one app, which takes the full screen
-  const calculateFullScreenLayout = useCallback((appInstance: AppInstance): Layout => {
+  // Calculate smart layouts for all apps in a tab
+  // Arranges apps in a 2-column grid pattern
+  const calculateSmartLayouts = useCallback((appInstances: AppInstance[], _existingLayouts: Layout[]): Layout[] => {
     const availableHeight = Math.floor((window.innerHeight - 72) / 30);
     const fullHeight = Math.max(availableHeight, 20);
+    const totalApps = appInstances.length;
     
-    return {
-      i: appInstance.id,
-      x: 0,
-      y: 0,
-      w: 12, // Full width (all 12 columns)
-      h: fullHeight, // Full height
-    };
+    if (totalApps === 0) return [];
+    
+    // Grid configuration: 2 apps per row
+    const appsPerRow = 2;
+    const widthPerApp = 12 / appsPerRow; // 6 columns per app
+    const rowsNeeded = Math.ceil(totalApps / appsPerRow);
+    const heightPerApp = Math.floor(fullHeight / rowsNeeded);
+    
+    return appInstances.map((instance, idx) => {
+      const row = Math.floor(idx / appsPerRow);
+      const col = idx % appsPerRow;
+      
+      // For single app, use full width
+      if (totalApps === 1) {
+        return {
+          i: instance.id,
+          x: 0,
+          y: 0,
+          w: 12,
+          h: fullHeight,
+        };
+      }
+      
+      // For multiple apps, calculate grid position
+      // Special case: if odd number of apps, last app in bottom row gets full width
+      const isLastAppInIncompleteRow = (idx === totalApps - 1) && (totalApps % appsPerRow !== 0);
+      
+      return {
+        i: instance.id,
+        x: isLastAppInIncompleteRow ? 0 : col * widthPerApp,
+        y: row * heightPerApp,
+        w: isLastAppInIncompleteRow ? 12 : widthPerApp,
+        h: heightPerApp,
+      };
+    });
   }, []);
 
 
@@ -134,19 +195,24 @@ function App() {
           name: app.name,
         };
 
+        // Lock layout to prevent react-grid-layout from overwriting our calculated layouts
+        setIsLayoutLocked(true);
         setTabs(prev => prev.map(tab => {
           if (tab.id === activeTabId) {
-            // Replace existing app with new one (only one app per tab)
-            const newLayout = calculateFullScreenLayout(newInstance);
+            // Add new app to existing apps (or create first app)
+            const updatedAppInstances = [...tab.appInstances, newInstance];
+            const newLayouts = calculateSmartLayouts(updatedAppInstances, tab.layouts);
             
             return {
               ...tab,
-              appInstances: [newInstance], // Replace, don't add
-              layouts: [newLayout], // Single layout for single app
+              appInstances: updatedAppInstances,
+              layouts: newLayouts,
             };
           }
           return tab;
         }));
+        // Unlock after a short delay to allow the layout to settle
+        setTimeout(() => setIsLayoutLocked(false), 100);
         break;
       }
 
@@ -188,19 +254,22 @@ function App() {
             appId: marketApp.id,
             name: marketApp.name,
           };
+          setIsLayoutLocked(true);
           setTabs(prev => prev.map(tab => {
             if (tab.id === activeTabId) {
-              // Replace existing app with new one (only one app per tab)
-              const newLayout = calculateFullScreenLayout(newInstance);
+              // Add new app to existing apps
+              const updatedAppInstances = [...tab.appInstances, newInstance];
+              const newLayouts = calculateSmartLayouts(updatedAppInstances, tab.layouts);
               
               return {
                 ...tab,
-                appInstances: [newInstance], // Replace, don't add
-                layouts: [newLayout], // Single layout for single app
+                appInstances: updatedAppInstances,
+                layouts: newLayouts,
               };
             }
             return tab;
           }));
+          setTimeout(() => setIsLayoutLocked(false), 100);
         }
         break;
       }
@@ -213,19 +282,22 @@ function App() {
             appId: settingsApp.id,
             name: settingsApp.name,
           };
+          setIsLayoutLocked(true);
           setTabs(prev => prev.map(tab => {
             if (tab.id === activeTabId) {
-              // Replace existing app with new one (only one app per tab)
-              const newLayout = calculateFullScreenLayout(newInstance);
+              // Add new app to existing apps
+              const updatedAppInstances = [...tab.appInstances, newInstance];
+              const newLayouts = calculateSmartLayouts(updatedAppInstances, tab.layouts);
               
               return {
                 ...tab,
-                appInstances: [newInstance], // Replace, don't add
-                layouts: [newLayout], // Single layout for single app
+                appInstances: updatedAppInstances,
+                layouts: newLayouts,
               };
             }
             return tab;
           }));
+          setTimeout(() => setIsLayoutLocked(false), 100);
         }
         break;
       }
@@ -238,19 +310,133 @@ function App() {
             appId: helpApp.id,
             name: helpApp.name,
           };
+          setIsLayoutLocked(true);
           setTabs(prev => prev.map(tab => {
             if (tab.id === activeTabId) {
-              // Replace existing app with new one (only one app per tab)
-              const newLayout = calculateFullScreenLayout(newInstance);
+              // Add new app to existing apps
+              const updatedAppInstances = [...tab.appInstances, newInstance];
+              const newLayouts = calculateSmartLayouts(updatedAppInstances, tab.layouts);
               
               return {
                 ...tab,
-                appInstances: [newInstance], // Replace, don't add
-                layouts: [newLayout], // Single layout for single app
+                appInstances: updatedAppInstances,
+                layouts: newLayouts,
               };
             }
             return tab;
           }));
+          setTimeout(() => setIsLayoutLocked(false), 100);
+        }
+        break;
+      }
+
+      case 'SAVE': {
+        if (parsed.args.length === 0) {
+          console.log('Usage: SAVE [view_name]');
+          return;
+        }
+        // Extract view name from original input to preserve case
+        const viewName = parsed.raw.replace(/^save\s+/i, '').trim();
+        const activeTab = tabs.find(t => t.id === activeTabId);
+        if (!activeTab) {
+          console.log('No active tab to save');
+          return;
+        }
+        
+        // Filter minimized apps to only include those in the active tab
+        const minimizedAppIds = Array.from(minimizedApps).filter(appId =>
+          activeTab.appInstances.some(inst => inst.id === appId)
+        );
+        
+        const savedData: SavedTabData = {
+          name: activeTab.name,
+          appInstances: activeTab.appInstances,
+          layouts: activeTab.layouts,
+          minimizedAppIds,
+        };
+        
+        saveView(viewName, savedData);
+        console.log(`View "${viewName}" saved successfully`);
+        break;
+      }
+
+      case 'LOAD_VIEW': {
+        if (parsed.args.length === 0) {
+          console.log('Usage: LOAD VIEW [view_name]');
+          return;
+        }
+        // Extract view name from original input to preserve case
+        const viewName = parsed.raw.replace(/^load\s+view\s+/i, '').trim();
+        const savedData = loadView(viewName);
+        
+        if (!savedData) {
+          console.log(`View "${viewName}" not found. Use LIST VIEWS to see available views.`);
+          return;
+        }
+        
+        // Lock layout to prevent react-grid-layout from overwriting
+        setIsLayoutLocked(true);
+        setTabs(prev => prev.map(tab => {
+          if (tab.id === activeTabId) {
+            return {
+              ...tab,
+              name: savedData.name,
+              appInstances: savedData.appInstances,
+              layouts: savedData.layouts,
+            };
+          }
+          return tab;
+        }));
+        
+        // Restore minimized apps state
+        setMinimizedApps(prev => {
+          const newSet = new Set(prev);
+          // Remove minimized state for apps not in the loaded view
+          savedData.appInstances.forEach(inst => {
+            if (savedData.minimizedAppIds.includes(inst.id)) {
+              newSet.add(inst.id);
+            } else {
+              newSet.delete(inst.id);
+            }
+          });
+          // Remove minimized state for apps that are no longer in the tab
+          Array.from(newSet).forEach(appId => {
+            if (!savedData.appInstances.some(inst => inst.id === appId)) {
+              newSet.delete(appId);
+            }
+          });
+          return newSet;
+        });
+        
+        setTimeout(() => setIsLayoutLocked(false), 100);
+        console.log(`View "${viewName}" loaded successfully`);
+        break;
+      }
+
+      case 'LIST_VIEWS': {
+        const viewsApp = appRegistry.get('views');
+        if (viewsApp) {
+          const newInstance: AppInstance = {
+            id: `app-${Date.now()}`,
+            appId: viewsApp.id,
+            name: viewsApp.name,
+          };
+          setIsLayoutLocked(true);
+          setTabs(prev => prev.map(tab => {
+            if (tab.id === activeTabId) {
+              // Add new app to existing apps
+              const updatedAppInstances = [...tab.appInstances, newInstance];
+              const newLayouts = calculateSmartLayouts(updatedAppInstances, tab.layouts);
+              
+              return {
+                ...tab,
+                appInstances: updatedAppInstances,
+                layouts: newLayouts,
+              };
+            }
+            return tab;
+          }));
+          setTimeout(() => setIsLayoutLocked(false), 100);
         }
         break;
       }
@@ -370,10 +556,85 @@ function App() {
   }, [tabs.length]);
 
   const handleLayoutChange = useCallback((layouts: Layout[]) => {
-    setTabs(prev => prev.map(tab => 
-      tab.id === activeTabId ? { ...tab, layouts } : tab
-    ));
+    // Skip layout changes if we're programmatically updating layouts
+    if (isLayoutLocked) return;
+    
+    setTabs(prev => prev.map(tab => {
+      if (tab.id === activeTabId) {
+        // Update layouts, preserving minimized state
+        const updatedLayouts = layouts.map(layout => {
+          const isMinimized = minimizedApps.has(layout.i);
+          if (isMinimized && layout.h > 1) {
+            // If user tries to resize a minimized app, keep it minimized
+            return { ...layout, h: 1 };
+          }
+          return layout;
+        });
+        return { ...tab, layouts: updatedLayouts };
+      }
+      return tab;
+    }));
+  }, [activeTabId, minimizedApps, isLayoutLocked]);
+
+  const handleMinimize = useCallback((appId: string) => {
+    setMinimizedApps(prev => new Set(prev).add(appId));
+    // Update layout to minimize height
+    setTabs(prev => prev.map(tab => {
+      if (tab.id === activeTabId) {
+        const updatedLayouts = tab.layouts.map(layout => {
+          if (layout.i === appId) {
+            return { ...layout, h: 1 }; // 1 row = 30px
+          }
+          return layout;
+        });
+        return { ...tab, layouts: updatedLayouts };
+      }
+      return tab;
+    }));
   }, [activeTabId]);
+
+  const handleMaximize = useCallback((appId: string) => {
+    setMinimizedApps(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(appId);
+      return newSet;
+    });
+    // Restore layout using smart layout calculation
+    setIsLayoutLocked(true);
+    setTabs(prev => prev.map(tab => {
+      if (tab.id === activeTabId) {
+        // Recalculate all layouts to get proper heights for all apps
+        const newLayouts = calculateSmartLayouts(tab.appInstances, tab.layouts);
+        return { ...tab, layouts: newLayouts };
+      }
+      return tab;
+    }));
+    setTimeout(() => setIsLayoutLocked(false), 100);
+  }, [activeTabId, calculateSmartLayouts]);
+
+  const handleCloseApp = useCallback((appId: string) => {
+    // Remove minimized state if it was minimized
+    setMinimizedApps(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(appId);
+      return newSet;
+    });
+    // Remove app from tab and recalculate layouts
+    setIsLayoutLocked(true);
+    setTabs(prev => prev.map(tab => {
+      if (tab.id === activeTabId) {
+        const updatedAppInstances = tab.appInstances.filter(inst => inst.id !== appId);
+        const newLayouts = calculateSmartLayouts(updatedAppInstances, tab.layouts);
+        return {
+          ...tab,
+          appInstances: updatedAppInstances,
+          layouts: newLayouts,
+        };
+      }
+      return tab;
+    }));
+    setTimeout(() => setIsLayoutLocked(false), 100);
+  }, [activeTabId, calculateSmartLayouts]);
 
   const handleDragStart = useCallback((_e: React.DragEvent, appId: string) => {
     setDraggingAppId(appId);
@@ -550,12 +811,18 @@ function App() {
             const app = appRegistry.get(instance.appId);
             if (!app) return null;
             const AppComponent = app.component;
+            const isMinimized = minimizedApps.has(instance.id);
             return (
               <GridItem 
                 key={instance.id} 
                 id={instance.id}
+                appName={app.name}
+                isMinimized={isMinimized}
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
+                onMinimize={handleMinimize}
+                onMaximize={handleMaximize}
+                onClose={handleCloseApp}
               >
                 <AppComponent />
               </GridItem>

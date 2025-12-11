@@ -29,8 +29,23 @@ export const CommandConsole = ({ onCommand, position = 'bottom' }: CommandConsol
   useEffect(() => {
     // Update suggestions as user types
     const appNames = appRegistry.getAll().map(app => app.name);
+    
+    // Fetch saved views from localStorage
+    const savedViews: string[] = [];
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('dashboard-view-')) {
+          const viewName = key.replace('dashboard-view-', '');
+          savedViews.push(viewName);
+        }
+      }
+    } catch (e) {
+      // Ignore errors
+    }
+    
     if (input.trim()) {
-      const newSuggestions = getCommandSuggestions(input, appNames);
+      const newSuggestions = getCommandSuggestions(input, appNames, savedViews);
       setSuggestions(newSuggestions);
       setSelectedSuggestionIndex(-1); // Reset selection when suggestions change
     } else {
