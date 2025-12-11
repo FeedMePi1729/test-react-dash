@@ -60,10 +60,33 @@ function App() {
   const [activeTabId, setActiveTabId] = useState<string>(initialData.activeTabId);
   
   // Clean up localStorage and URL after component mounts (only once)
+  // Also initialize font size from localStorage
   useEffect(() => {
     if (initialData.popoutKey) {
       localStorage.removeItem(initialData.popoutKey);
       window.history.replaceState({}, '', window.location.pathname);
+    }
+    
+    // Initialize font size from localStorage
+    const saved = localStorage.getItem('dashboard-settings');
+    if (saved) {
+      try {
+        const settings = JSON.parse(saved);
+        const root = document.documentElement;
+        switch (settings.fontSize) {
+          case 'small':
+            root.style.setProperty('--font-size-base', '12px');
+            break;
+          case 'medium':
+            root.style.setProperty('--font-size-base', '14px');
+            break;
+          case 'large':
+            root.style.setProperty('--font-size-base', '16px');
+            break;
+        }
+      } catch (e) {
+        // Ignore parse errors
+      }
     }
   }, []);
   const [draggingAppId, setDraggingAppId] = useState<string | null>(null);

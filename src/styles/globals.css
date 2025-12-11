@@ -3,6 +3,10 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --font-size-base: 14px;
+  }
+
   * {
     border-radius: 0 !important;
   }
@@ -15,6 +19,7 @@
     background-color: #000000;
     color: #FFFFFF;
     font-family: 'Roboto Mono', 'Consolas', 'Courier New', monospace;
+    font-size: var(--font-size-base);
     overflow: hidden;
   }
 
@@ -140,5 +145,58 @@
   top: 0;
   right: 0;
   cursor: ne-resize;
+}
+
+/* AG Grid Bloomberg Theme Overrides */
+.ag-theme-alpine .bloomberg-header {
+  color: #FF9800 !important;
+  font-weight: bold;
+  border-bottom: 1px solid #FF9800 !important;
+}
+
+.ag-theme-alpine .ag-header-cell {
+  border-right: 1px solid #333333 !important;
+}
+
+.ag-theme-alpine .ag-row {
+  border-bottom: 1px solid #333333 !important;
+}
+
+.ag-theme-alpine .ag-row:hover {
+  background-color: rgba(255, 152, 0, 0.1) !important;
+}
+
+.ag-theme-alpine .ag-row-selected {
+  background-color: rgba(255, 152, 0, 0.2) !important;
+}
+
+.ag-theme-alpine .ag-header {
+  border-bottom: 2px solid #FF9800 !important;
+}
+
+.ag-theme-alpine .ag-paging-panel {
+  color: #FFFFFF !important;
+  font-family: monospace !important;
+  border-top: 1px solid #333333 !important;
+}
+
+.ag-theme-alpine .ag-paging-button {
+  color: #FF9800 !important;
+}
+
+.ag-theme-alpine .ag-paging-button:hover {
+  background-color: rgba(255, 152, 0, 0.1) !important;
+}
+
+.ag-theme-alpine .ag-filter-toolpanel-header {
+  background-color: #000000 !important;
+  color: #FF9800 !important;
+}
+
+.ag-theme-alpine input[class*="ag-"] {
+  background-color: #000000 !important;
+  color: #FFFFFF !important;
+  border: 1px solid #FF9800 !important;
+  font-family: monospace !important;
 }
 
