@@ -1,4 +1,3 @@
-import React from 'react';
 import { AppModule } from './types';
 
 // Placeholder app components

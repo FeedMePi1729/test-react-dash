@@ -65,7 +65,7 @@ export const parseCommand = (input: string): ParsedCommand => {
   };
 };
 
-export const getCommandSuggestions = (input: string): string[] => {
+export const getCommandSuggestions = (input: string, appNames: string[] = []): string[] => {
   const trimmed = input.trim().toUpperCase();
   const commands = [
     'LOAD',
@@ -76,13 +76,49 @@ export const getCommandSuggestions = (input: string): string[] => {
     'HELP',
   ];
 
+  // If input starts with "LOAD" or is empty, include app names
+  const shouldIncludeApps = !trimmed || trimmed.startsWith('LOAD');
+  
+  let allSuggestions: string[] = [];
+  
   if (!trimmed) {
-    return commands;
+    allSuggestions = [...commands];
+    if (shouldIncludeApps) {
+      allSuggestions.push(...appNames.map(name => `LOAD ${name}`));
+    }
+    return allSuggestions;
   }
 
-  return commands.filter(cmd => 
+  // Filter commands
+  const matchingCommands = commands.filter(cmd => 
     cmd.startsWith(trimmed) || 
     cmd.includes(trimmed)
   );
+  
+  allSuggestions = [...matchingCommands];
+  
+  // If user typed "LOAD" or starts typing an app name, include app suggestions
+  if (shouldIncludeApps) {
+    const loadPrefix = trimmed.startsWith('LOAD') ? trimmed.substring(4).trim() : trimmed;
+    
+    if (loadPrefix) {
+      // User is typing after "LOAD" - suggest matching app names
+      const matchingApps = appNames
+        .filter(name => name.toUpperCase().startsWith(loadPrefix) || name.toUpperCase().includes(loadPrefix))
+        .map(name => `LOAD ${name}`);
+      allSuggestions.push(...matchingApps);
+    } else if (trimmed.startsWith('LOAD')) {
+      // User typed "LOAD" - show all apps
+      allSuggestions.push(...appNames.map(name => `LOAD ${name}`));
+    } else {
+      // User might be typing an app name directly
+      const matchingApps = appNames
+        .filter(name => name.toUpperCase().startsWith(trimmed) || name.toUpperCase().includes(trimmed))
+        .map(name => `LOAD ${name}`);
+      allSuggestions.push(...matchingApps);
+    }
+  }
+  
+  return allSuggestions;
 };
 

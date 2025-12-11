@@ -1,4 +1,4 @@
-import { ReactNode, useState, useEffect } from 'react';
+import { ReactNode, useState, useEffect, forwardRef } from 'react';
 import GridLayout, { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -82,50 +82,55 @@ interface GridItemProps {
   onDragEnd?: () => void;
 }
 
-export const GridItem = ({ id, children, onDragStart, onDragEnd }: GridItemProps) => {
-  const handleDragStart = (e: React.DragEvent) => {
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('application/app-id', id);
-    // Create a custom drag image
-    const dragImage = document.createElement('div');
-    dragImage.style.position = 'absolute';
-    dragImage.style.top = '-1000px';
-    dragImage.style.padding = '8px';
-    dragImage.style.backgroundColor = '#000000';
-    dragImage.style.border = '1px solid #FF9800';
-    dragImage.style.color = '#FF9800';
-    dragImage.style.fontFamily = 'monospace';
-    dragImage.style.fontSize = '12px';
-    dragImage.textContent = 'Moving app...';
-    document.body.appendChild(dragImage);
-    e.dataTransfer.setDragImage(dragImage, 0, 0);
-    setTimeout(() => document.body.removeChild(dragImage), 0);
-    
-    if (onDragStart) {
-      onDragStart(e, id);
-    }
-  };
+// Use forwardRef so react-grid-layout can attach refs for drag/resize functionality
+export const GridItem = forwardRef<HTMLDivElement, GridItemProps>(
+  ({ id, children, onDragStart, onDragEnd, ...rest }, ref) => {
+    const handleDragStart = (e: React.DragEvent) => {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('application/app-id', id);
+      // Create a custom drag image
+      const dragImage = document.createElement('div');
+      dragImage.style.position = 'absolute';
+      dragImage.style.top = '-1000px';
+      dragImage.style.padding = '8px';
+      dragImage.style.backgroundColor = '#000000';
+      dragImage.style.border = '1px solid #FF9800';
+      dragImage.style.color = '#FF9800';
+      dragImage.style.fontFamily = 'monospace';
+      dragImage.style.fontSize = '12px';
+      dragImage.textContent = 'Moving app...';
+      document.body.appendChild(dragImage);
+      e.dataTransfer.setDragImage(dragImage, 0, 0);
+      setTimeout(() => document.body.removeChild(dragImage), 0);
+      
+      if (onDragStart) {
+        onDragStart(e, id);
+      }
+    };
 
-  const handleDragEnd = (e: React.DragEvent) => {
-    if (onDragEnd) {
-      onDragEnd();
-    }
-  };
+    const handleDragEnd = () => {
+      if (onDragEnd) {
+        onDragEnd();
+      }
+    };
 
-  return (
-    <div
-      className="bloomberg-border bloomberg-border-amber bloomberg-bg-black h-full w-full overflow-hidden"
-      draggable
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-    >
-      <div className="drag-handle h-6 flex items-center px-2 bloomberg-border-b bloomberg-border-amber cursor-move">
-        <span className="text-bloomberg-amber font-mono text-xs">≡</span>
+    return (
+      <div
+        ref={ref}
+        className="bloomberg-border bloomberg-border-amber bloomberg-bg-black h-full w-full overflow-hidden"
+        draggable
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        {...rest}
+      >
+        <div className="drag-handle h-6 flex items-center px-2 bloomberg-border-b bloomberg-border-amber cursor-move">
+          <span className="text-bloomberg-amber font-mono text-xs">≡</span>
+        </div>
+        <div className="h-[calc(100%-1.5rem)] overflow-auto">
+          {children}
+        </div>
       </div>
-      <div className="h-[calc(100%-1.5rem)] overflow-auto">
-        {children}
-      </div>
-    </div>
-  );
-};
+    );
+  }
+);
 

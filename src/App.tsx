@@ -12,89 +12,81 @@ interface TabWithApps extends Tab {
   layouts: Layout[];
 }
 
-function App() {
-  // Check for popped-out tab data in URL
-  const getInitialTabs = (): TabWithApps[] => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const popoutData = urlParams.get('popout');
-    
-    if (popoutData) {
-      try {
-        const tabData = JSON.parse(decodeURIComponent(popoutData));
-        // Clean up URL
-        window.history.replaceState({}, '', window.location.pathname);
-        return [{
-          id: tabData.id,
-          name: tabData.name,
-          isActive: true,
-          appInstances: tabData.appInstances || [],
-          layouts: tabData.layouts || [],
-        }];
-      } catch (e) {
-        console.error('Failed to parse popout data:', e);
+// Parse popout data once, outside component to avoid StrictMode double-invocation issues
+const parsePopoutData = (): { tabs: TabWithApps[]; activeTabId: string; popoutKey: string | null } => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const popoutKey = urlParams.get('popout');
+  
+  if (popoutKey) {
+    try {
+      const storedData = localStorage.getItem(popoutKey);
+      if (storedData) {
+        const tabData = JSON.parse(storedData);
+        return {
+          tabs: [{
+            id: tabData.id,
+            name: tabData.name || 'Popped Out Tab',
+            isActive: true,
+            appInstances: tabData.appInstances || [],
+            layouts: tabData.layouts || [],
+          }],
+          activeTabId: tabData.id,
+          popoutKey,
+        };
       }
+    } catch (e) {
+      console.error('Failed to parse popout data:', e);
     }
-    
-    return [
-      {
-        id: 'tab-1',
-        name: 'Tab 1',
-        isActive: true,
-        appInstances: [],
-        layouts: [],
-      },
-    ];
+  }
+  
+  return {
+    tabs: [{
+      id: 'tab-1',
+      name: 'Tab 1',
+      isActive: true,
+      appInstances: [],
+      layouts: [],
+    }],
+    activeTabId: 'tab-1',
+    popoutKey: null,
   };
+};
 
-  const [tabs, setTabs] = useState<TabWithApps[]>(getInitialTabs);
-  const [activeTabId, setActiveTabId] = useState<string>(() => {
-    const initialTabs = getInitialTabs();
-    return initialTabs[0]?.id || 'tab-1';
-  });
+// Parse once at module load time (before React renders)
+const initialData = parsePopoutData();
+
+function App() {
+  const [tabs, setTabs] = useState<TabWithApps[]>(initialData.tabs);
+  const [activeTabId, setActiveTabId] = useState<string>(initialData.activeTabId);
+  
+  // Clean up localStorage and URL after component mounts (only once)
+  useEffect(() => {
+    if (initialData.popoutKey) {
+      localStorage.removeItem(initialData.popoutKey);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
   const [draggingAppId, setDraggingAppId] = useState<string | null>(null);
 
   const activeTab = useMemo(() => {
     return tabs.find(t => t.id === activeTabId) || tabs[0];
   }, [tabs, activeTabId]);
 
-  // Calculate split-screen layout for new apps
-  // rowHeight is 30px, so calculate height based on viewport
-  const calculateNewAppLayout = useCallback((existingAppsCount: number): Omit<Layout, 'i'> => {
-    // Calculate available height in grid units (rowHeight = 30px)
-    // Account for console (32px) + tab bar (40px) = 72px
+  // Calculate full-screen layout for a single app
+  // Each tab can only have one app, which takes the full screen
+  const calculateFullScreenLayout = useCallback((appInstance: AppInstance): Layout => {
     const availableHeight = Math.floor((window.innerHeight - 72) / 30);
-    const fullHeight = Math.max(availableHeight, 20); // Minimum 20 rows
+    const fullHeight = Math.max(availableHeight, 20);
     
-    if (existingAppsCount === 0) {
-      // First app: full screen
-      return {
-        x: 0,
-        y: 0,
-        w: 12,
-        h: fullHeight,
-      };
-    } else if (existingAppsCount === 1) {
-      // Second app: split horizontally
-      // Resize first app to half width, place second app on the right
-      return {
-        x: 6,
-        y: 0,
-        w: 6,
-        h: fullHeight,
-      };
-    } else {
-      // Third+ app: find available space or split further
-      // Stack vertically, alternating sides
-      const row = Math.floor((existingAppsCount - 1) / 2);
-      const halfHeight = Math.floor(fullHeight / 2);
-      return {
-        x: existingAppsCount % 2 === 0 ? 0 : 6,
-        y: row * halfHeight,
-        w: 6,
-        h: halfHeight,
-      };
-    }
+    return {
+      i: appInstance.id,
+      x: 0,
+      y: 0,
+      w: 12, // Full width (all 12 columns)
+      h: fullHeight, // Full height
+    };
   }, []);
+
 
   const handleCommand = useCallback((command: string) => {
     const parsed = parseCommand(command);
@@ -121,40 +113,13 @@ function App() {
 
         setTabs(prev => prev.map(tab => {
           if (tab.id === activeTabId) {
-            const existingCount = tab.appInstances.length;
-            let newLayouts = [...tab.layouts];
+            // Replace existing app with new one (only one app per tab)
+            const newLayout = calculateFullScreenLayout(newInstance);
             
-            // If this is the second app, resize the first app to half width
-            if (existingCount === 1 && newLayouts.length > 0) {
-              // Calculate full height
-              const availableHeight = Math.floor((window.innerHeight - 72) / 30);
-              const fullHeight = Math.max(availableHeight, 20);
-              // Create new array with updated first layout to ensure React detects the change
-              newLayouts = [
-                {
-                  ...newLayouts[0],
-                  w: 6,
-                  h: fullHeight,
-                  x: 0,
-                  y: 0,
-                },
-                ...newLayouts.slice(1)
-              ];
-            }
-            
-            // Calculate layout for new app
-            const newLayoutTemplate = calculateNewAppLayout(existingCount);
-            const newLayout: Layout = {
-              ...newLayoutTemplate,
-              i: newInstance.id,
-            };
-            
-            // Create new array with the new layout
-            newLayouts = [...newLayouts, newLayout];
             return {
               ...tab,
-              appInstances: [...tab.appInstances, newInstance],
-              layouts: newLayouts,
+              appInstances: [newInstance], // Replace, don't add
+              layouts: [newLayout], // Single layout for single app
             };
           }
           return tab;
@@ -202,35 +167,13 @@ function App() {
           };
           setTabs(prev => prev.map(tab => {
             if (tab.id === activeTabId) {
-              const existingCount = tab.appInstances.length;
-              const newLayouts = [...tab.layouts];
+              // Replace existing app with new one (only one app per tab)
+              const newLayout = calculateFullScreenLayout(newInstance);
               
-              // If this is the second app, resize the first app to half width
-              if (existingCount === 1 && newLayouts.length > 0) {
-                // Calculate full height
-                const availableHeight = Math.floor((window.innerHeight - 72) / 30);
-                const fullHeight = Math.max(availableHeight, 20);
-                // Resize first app to left half, preserve y position
-                newLayouts[0] = {
-                  ...newLayouts[0],
-                  w: 6,
-                  h: fullHeight,
-                  x: 0, // Ensure it's on the left
-                  y: 0, // Ensure it starts at top
-                };
-              }
-              
-              const newLayoutTemplate = calculateNewAppLayout(existingCount);
-              const newLayout: Layout = {
-                ...newLayoutTemplate,
-                i: newInstance.id,
-              };
-              
-              newLayouts.push(newLayout);
               return {
                 ...tab,
-                appInstances: [...tab.appInstances, newInstance],
-                layouts: newLayouts,
+                appInstances: [newInstance], // Replace, don't add
+                layouts: [newLayout], // Single layout for single app
               };
             }
             return tab;
@@ -249,35 +192,13 @@ function App() {
           };
           setTabs(prev => prev.map(tab => {
             if (tab.id === activeTabId) {
-              const existingCount = tab.appInstances.length;
-              const newLayouts = [...tab.layouts];
+              // Replace existing app with new one (only one app per tab)
+              const newLayout = calculateFullScreenLayout(newInstance);
               
-              // If this is the second app, resize the first app to half width
-              if (existingCount === 1 && newLayouts.length > 0) {
-                // Calculate full height
-                const availableHeight = Math.floor((window.innerHeight - 72) / 30);
-                const fullHeight = Math.max(availableHeight, 20);
-                // Resize first app to left half, preserve y position
-                newLayouts[0] = {
-                  ...newLayouts[0],
-                  w: 6,
-                  h: fullHeight,
-                  x: 0, // Ensure it's on the left
-                  y: 0, // Ensure it starts at top
-                };
-              }
-              
-              const newLayoutTemplate = calculateNewAppLayout(existingCount);
-              const newLayout: Layout = {
-                ...newLayoutTemplate,
-                i: newInstance.id,
-              };
-              
-              newLayouts.push(newLayout);
               return {
                 ...tab,
-                appInstances: [...tab.appInstances, newInstance],
-                layouts: newLayouts,
+                appInstances: [newInstance], // Replace, don't add
+                layouts: [newLayout], // Single layout for single app
               };
             }
             return tab;
@@ -296,35 +217,13 @@ function App() {
           };
           setTabs(prev => prev.map(tab => {
             if (tab.id === activeTabId) {
-              const existingCount = tab.appInstances.length;
-              const newLayouts = [...tab.layouts];
+              // Replace existing app with new one (only one app per tab)
+              const newLayout = calculateFullScreenLayout(newInstance);
               
-              // If this is the second app, resize the first app to half width
-              if (existingCount === 1 && newLayouts.length > 0) {
-                // Calculate full height
-                const availableHeight = Math.floor((window.innerHeight - 72) / 30);
-                const fullHeight = Math.max(availableHeight, 20);
-                // Resize first app to left half, preserve y position
-                newLayouts[0] = {
-                  ...newLayouts[0],
-                  w: 6,
-                  h: fullHeight,
-                  x: 0, // Ensure it's on the left
-                  y: 0, // Ensure it starts at top
-                };
-              }
-              
-              const newLayoutTemplate = calculateNewAppLayout(existingCount);
-              const newLayout: Layout = {
-                ...newLayoutTemplate,
-                i: newInstance.id,
-              };
-              
-              newLayouts.push(newLayout);
               return {
                 ...tab,
-                appInstances: [...tab.appInstances, newInstance],
-                layouts: newLayouts,
+                appInstances: [newInstance], // Replace, don't add
+                layouts: [newLayout], // Single layout for single app
               };
             }
             return tab;
@@ -389,9 +288,12 @@ function App() {
       layouts: tab.layouts,
     };
 
-    // Encode the data as a URL parameter
-    const encodedData = encodeURIComponent(JSON.stringify(tabData));
-    const url = `${window.location.origin}${window.location.pathname}?popout=${encodedData}`;
+    // Store data in localStorage with a unique key (avoids URL length limits)
+    const popoutKey = `popout-${tab.id}-${Date.now()}`;
+    localStorage.setItem(popoutKey, JSON.stringify(tabData));
+    
+    // Pass only the key in the URL
+    const url = `${window.location.origin}${window.location.pathname}?popout=${popoutKey}`;
 
     // Open new window
     const newWindow = window.open(
@@ -463,14 +365,12 @@ function App() {
       // Find the source tab and app instance
       let sourceTab: TabWithApps | undefined;
       let appInstance: AppInstance | undefined;
-      let appLayout: Layout | undefined;
 
       for (const tab of prev) {
         const instance = tab.appInstances.find(inst => inst.id === appId);
         if (instance) {
           sourceTab = tab;
           appInstance = instance;
-          appLayout = tab.layouts.find(l => l.i === appId);
           break;
         }
       }
@@ -491,23 +391,25 @@ function App() {
         return tab;
       });
 
-      // Add to target tab with a new position
+      // Replace app in target tab (only one app per tab)
       return updatedTabs.map(tab => {
         if (tab.id === targetTabId) {
-          const newLayout: Layout = appLayout 
-            ? { ...appLayout, x: 0, y: 0 } // Reset position to top-left
-            : {
-                i: appInstance!.id,
-                x: 0,
-                y: 0,
-                w: 3,
-                h: 4,
-              };
+          // Calculate full-screen layout for the moved app
+          const availableHeight = Math.floor((window.innerHeight - 72) / 30);
+          const fullHeight = Math.max(availableHeight, 20);
+          
+          const newLayout: Layout = {
+            i: appInstance!.id,
+            x: 0,
+            y: 0,
+            w: 12, // Full width
+            h: fullHeight, // Full height
+          };
           
           return {
             ...tab,
-            appInstances: [...tab.appInstances, appInstance!],
-            layouts: [...tab.layouts, newLayout],
+            appInstances: [appInstance!], // Replace, don't add
+            layouts: [newLayout], // Single layout
           };
         }
         return tab;

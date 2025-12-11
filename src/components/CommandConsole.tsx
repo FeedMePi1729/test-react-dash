@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
-import { parseCommand, getCommandSuggestions } from '../utils/commandParser';
+import { getCommandSuggestions } from '../utils/commandParser';
+import { appRegistry } from '../apps/AppRegistry';
 
 interface CommandConsoleProps {
   onCommand: (command: string) => void;
@@ -12,6 +13,7 @@ export const CommandConsole = ({ onCommand, position = 'bottom' }: CommandConsol
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
   const [cursorPosition, setCursorPosition] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const measureRef = useRef<HTMLSpanElement>(null);
@@ -26,10 +28,14 @@ export const CommandConsole = ({ onCommand, position = 'bottom' }: CommandConsol
 
   useEffect(() => {
     // Update suggestions as user types
+    const appNames = appRegistry.getAll().map(app => app.name);
     if (input.trim()) {
-      setSuggestions(getCommandSuggestions(input));
+      const newSuggestions = getCommandSuggestions(input, appNames);
+      setSuggestions(newSuggestions);
+      setSelectedSuggestionIndex(-1); // Reset selection when suggestions change
     } else {
       setSuggestions([]);
+      setSelectedSuggestionIndex(-1);
     }
   }, [input]);
 
@@ -64,40 +70,81 @@ export const CommandConsole = ({ onCommand, position = 'bottom' }: CommandConsol
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    // Handle suggestion navigation with arrow keys
+    if (suggestions.length > 0 && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      e.preventDefault();
+      if (e.key === 'ArrowUp') {
+        const newIndex = selectedSuggestionIndex <= 0 
+          ? suggestions.length - 1 
+          : selectedSuggestionIndex - 1;
+        setSelectedSuggestionIndex(newIndex);
+      } else if (e.key === 'ArrowDown') {
+        const newIndex = selectedSuggestionIndex >= suggestions.length - 1
+          ? 0
+          : selectedSuggestionIndex + 1;
+        setSelectedSuggestionIndex(newIndex);
+      }
+      return;
+    }
+
+    // Handle Enter - use selected suggestion if available
     if (e.key === 'Enter') {
-      const trimmed = input.trim();
-      if (trimmed) {
-        onCommand(trimmed);
-        setHistory(prev => [...prev, trimmed]);
+      e.preventDefault();
+      let commandToExecute = input.trim();
+      
+      // If a suggestion is selected, use it
+      if (selectedSuggestionIndex >= 0 && selectedSuggestionIndex < suggestions.length) {
+        commandToExecute = suggestions[selectedSuggestionIndex];
+      }
+      
+      if (commandToExecute) {
+        onCommand(commandToExecute);
+        setHistory(prev => [...prev, commandToExecute]);
         setHistoryIndex(-1);
         setInput('');
         setSuggestions([]);
+        setSelectedSuggestionIndex(-1);
       }
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      if (history.length > 0) {
-        const newIndex = historyIndex === -1 
-          ? history.length - 1 
-          : Math.max(0, historyIndex - 1);
-        setHistoryIndex(newIndex);
-        setInput(history[newIndex]);
-      }
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      if (historyIndex !== -1) {
-        const newIndex = historyIndex + 1;
-        if (newIndex >= history.length) {
-          setHistoryIndex(-1);
-          setInput('');
-        } else {
+      return;
+    }
+
+    // Handle history navigation (only when no suggestions are shown)
+    if (suggestions.length === 0) {
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (history.length > 0) {
+          const newIndex = historyIndex === -1 
+            ? history.length - 1 
+            : Math.max(0, historyIndex - 1);
           setHistoryIndex(newIndex);
           setInput(history[newIndex]);
         }
+        return;
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (historyIndex !== -1) {
+          const newIndex = historyIndex + 1;
+          if (newIndex >= history.length) {
+            setHistoryIndex(-1);
+            setInput('');
+          } else {
+            setHistoryIndex(newIndex);
+            setInput(history[newIndex]);
+          }
+        }
+        return;
       }
-    } else if (e.key === 'Tab' && suggestions.length > 0) {
+    }
+
+    // Handle Tab for autocomplete
+    if (e.key === 'Tab' && suggestions.length > 0) {
       e.preventDefault();
-      setInput(suggestions[0] + ' ');
+      const suggestionToUse = selectedSuggestionIndex >= 0 
+        ? suggestions[selectedSuggestionIndex]
+        : suggestions[0];
+      setInput(suggestionToUse + (suggestionToUse.endsWith(' ') ? '' : ' '));
       inputRef.current?.focus();
+      setSelectedSuggestionIndex(-1);
     }
   };
 
@@ -111,20 +158,6 @@ export const CommandConsole = ({ onCommand, position = 'bottom' }: CommandConsol
         borderTop: position === 'bottom' ? '1px solid #FF9800' : 'none',
       }}
     >
-      {suggestions.length > 0 && position === 'top' && (
-        <div 
-          className="px-2 pt-1"
-          style={{ borderBottom: '1px solid #FF9800' }}
-        >
-          <div className="text-bloomberg-amber text-xs font-mono">
-            {suggestions.slice(0, 5).map((suggestion, idx) => (
-              <div key={idx} className="py-0.5">
-                {suggestion}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
       <div className="flex items-center px-2 py-1">
         <span className="text-bloomberg-amber font-mono text-sm mr-2">&gt;</span>
         <div className="flex-1 relative flex items-center">
@@ -172,11 +205,20 @@ export const CommandConsole = ({ onCommand, position = 'bottom' }: CommandConsol
           )}
         </div>
       </div>
-      {suggestions.length > 0 && position === 'bottom' && (
-        <div className="px-2 pb-1">
+      {suggestions.length > 0 && (
+        <div 
+          className={position === 'top' ? 'px-2 pb-1' : 'px-2 pt-1'}
+          style={{ 
+            borderTop: position === 'bottom' ? '1px solid #FF9800' : 'none',
+            borderBottom: position === 'top' ? '1px solid #FF9800' : 'none',
+          }}
+        >
           <div className="text-bloomberg-amber text-xs font-mono">
             {suggestions.slice(0, 5).map((suggestion, idx) => (
-              <div key={idx} className="py-0.5">
+              <div 
+                key={idx} 
+                className={`py-0.5 ${selectedSuggestionIndex === idx ? 'bg-bloomberg-amber text-black' : ''}`}
+              >
                 {suggestion}
               </div>
             ))}
