@@ -38,7 +38,7 @@ export const AppContainer = ({ children, layouts, onLayoutChange, onDrop, draggi
   };
 
   return (
-    <div 
+    <div
       className="h-full w-full bloomberg-bg-black"
       onDragOver={handleDragOver}
       onDrop={handleDrop}
@@ -62,8 +62,8 @@ export const AppContainer = ({ children, layouts, onLayoutChange, onDrop, draggi
         compactType={null}
         preventCollision={true}
         allowOverlap={false}
-        minW={2}
-        minH={2}
+
+
         style={{
           backgroundColor: '#000000',
           minHeight: '100%',
@@ -107,7 +107,7 @@ export const GridItem = forwardRef<HTMLDivElement, GridItemProps>(
       document.body.appendChild(dragImage);
       e.dataTransfer.setDragImage(dragImage, 0, 0);
       setTimeout(() => document.body.removeChild(dragImage), 0);
-      
+
       if (onDragStart) {
         onDragStart(e, id);
       }

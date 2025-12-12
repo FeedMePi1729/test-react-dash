@@ -46,7 +46,7 @@ const loadView = (viewName: string): SavedTabData | null => {
 const parsePopoutData = (): { tabs: TabWithApps[]; activeTabId: string; popoutKey: string | null } => {
   const urlParams = new URLSearchParams(window.location.search);
   const popoutKey = urlParams.get('popout');
-  
+
   if (popoutKey) {
     try {
       const storedData = localStorage.getItem(popoutKey);
@@ -68,7 +68,7 @@ const parsePopoutData = (): { tabs: TabWithApps[]; activeTabId: string; popoutKe
       console.error('Failed to parse popout data:', e);
     }
   }
-  
+
   return {
     tabs: [{
       id: 'tab-1',
@@ -90,7 +90,7 @@ function App() {
   const [activeTabId, setActiveTabId] = useState<string>(initialData.activeTabId);
   const [minimizedApps, setMinimizedApps] = useState<Set<string>>(new Set());
   const [isLayoutLocked, setIsLayoutLocked] = useState(false);
-  
+
   // Clean up localStorage and URL after component mounts (only once)
   // Also initialize font size from localStorage
   useEffect(() => {
@@ -98,7 +98,7 @@ function App() {
       localStorage.removeItem(initialData.popoutKey);
       window.history.replaceState({}, '', window.location.pathname);
     }
-    
+
     // Initialize font size from localStorage
     const saved = localStorage.getItem('dashboard-settings');
     if (saved) {
@@ -133,19 +133,19 @@ function App() {
     const availableHeight = Math.floor((window.innerHeight - 72) / 30);
     const fullHeight = Math.max(availableHeight, 20);
     const totalApps = appInstances.length;
-    
+
     if (totalApps === 0) return [];
-    
+
     // Grid configuration: 2 apps per row
     const appsPerRow = 2;
     const widthPerApp = 12 / appsPerRow; // 6 columns per app
     const rowsNeeded = Math.ceil(totalApps / appsPerRow);
     const heightPerApp = Math.floor(fullHeight / rowsNeeded);
-    
+
     return appInstances.map((instance, idx) => {
       const row = Math.floor(idx / appsPerRow);
       const col = idx % appsPerRow;
-      
+
       // For single app, use full width
       if (totalApps === 1) {
         return {
@@ -156,11 +156,11 @@ function App() {
           h: fullHeight,
         };
       }
-      
+
       // For multiple apps, calculate grid position
       // Special case: if odd number of apps, last app in bottom row gets full width
       const isLastAppInIncompleteRow = (idx === totalApps - 1) && (totalApps % appsPerRow !== 0);
-      
+
       return {
         i: instance.id,
         x: isLastAppInIncompleteRow ? 0 : col * widthPerApp,
@@ -172,166 +172,91 @@ function App() {
   }, []);
 
 
+  const spawnApp = useCallback((appId: string) => {
+    const app = appRegistry.get(appId);
+    if (app) {
+      const newInstance: AppInstance = {
+        id: `app-${Date.now()}`,
+        appId: app.id,
+        name: app.name,
+      };
+      setIsLayoutLocked(true);
+      setTabs(prev => prev.map(tab => {
+        if (tab.id === activeTabId) {
+          // Add new app to existing apps
+          const updatedAppInstances = [...tab.appInstances, newInstance];
+          const newLayouts = calculateSmartLayouts(updatedAppInstances, tab.layouts);
+
+          return {
+            ...tab,
+            appInstances: updatedAppInstances,
+            layouts: newLayouts,
+          };
+        }
+        return tab;
+      }));
+      setTimeout(() => setIsLayoutLocked(false), 100);
+    } else {
+      console.error(`App with ID ${appId} not found`);
+    }
+  }, [activeTabId, calculateSmartLayouts]);
+
+  const handleNewTab = useCallback(() => {
+    const newTab: TabWithApps = {
+      id: `tab-${Date.now()}`,
+      name: `Tab ${tabs.length + 1}`,
+      isActive: false,
+      appInstances: [],
+      layouts: [],
+    };
+    setTabs(prev => prev.map(t => ({ ...t, isActive: false })).concat(newTab));
+    setActiveTabId(newTab.id);
+  }, [tabs.length]);
+
+  const handleTabClose = useCallback((tabId: string) => {
+    if (tabs.length <= 1) {
+      return;
+    }
+    const newTabs = tabs.filter(t => t.id !== tabId);
+    if (tabId === activeTabId) {
+      setActiveTabId(newTabs[0].id);
+    }
+    setTabs(newTabs.map((t, idx) => ({ ...t, isActive: idx === 0 })));
+  }, [tabs, activeTabId]);
+
   const handleCommand = useCallback((command: string) => {
     const parsed = parseCommand(command);
 
-    switch (parsed.type) {
-      case 'LOAD': {
-        if (parsed.args.length === 0) {
+    const handlers: Partial<Record<string, (args: string[]) => void>> = {
+      'LOAD': (args) => {
+        if (args.length === 0) {
           console.log('Usage: LOAD [app_name]');
           return;
         }
-        const appName = parsed.args.join(' ');
+        const appName = args.join(' ');
         const app = appRegistry.findByName(appName);
-        
+
         if (!app) {
           console.log(`App "${appName}" not found. Available apps: ${appRegistry.getAll().map(a => a.name).join(', ')}`);
           return;
         }
-
-        const newInstance: AppInstance = {
-          id: `app-${Date.now()}`,
-          appId: app.id,
-          name: app.name,
-        };
-
-        // Lock layout to prevent react-grid-layout from overwriting our calculated layouts
-        setIsLayoutLocked(true);
-        setTabs(prev => prev.map(tab => {
-          if (tab.id === activeTabId) {
-            // Add new app to existing apps (or create first app)
-            const updatedAppInstances = [...tab.appInstances, newInstance];
-            const newLayouts = calculateSmartLayouts(updatedAppInstances, tab.layouts);
-            
-            return {
-              ...tab,
-              appInstances: updatedAppInstances,
-              layouts: newLayouts,
-            };
-          }
-          return tab;
-        }));
-        // Unlock after a short delay to allow the layout to settle
-        setTimeout(() => setIsLayoutLocked(false), 100);
-        break;
-      }
-
-      case 'NEW_TAB': {
-        const newTab: TabWithApps = {
-          id: `tab-${Date.now()}`,
-          name: `Tab ${tabs.length + 1}`,
-          isActive: false,
-          appInstances: [],
-          layouts: [],
-        };
-        setTabs(prev => prev.map(t => ({ ...t, isActive: false })).concat(newTab));
-        setActiveTabId(newTab.id);
-        break;
-      }
-
-      case 'CLOSE_TAB': {
+        spawnApp(app.id);
+      },
+      'NEW_TAB': () => handleNewTab(),
+      'CLOSE_TAB': (args) => {
         if (tabs.length <= 1) {
           console.log('Cannot close the last tab');
           return;
         }
-        const tabIndex = parsed.args[0] ? parseInt(parsed.args[0]) - 1 : tabs.findIndex(t => t.id === activeTabId);
+        const tabIndex = args[0] ? parseInt(args[0]) - 1 : tabs.findIndex(t => t.id === activeTabId);
         if (tabIndex >= 0 && tabIndex < tabs.length) {
-          const tabToClose = tabs[tabIndex];
-          const newTabs = tabs.filter(t => t.id !== tabToClose.id);
-          if (tabToClose.id === activeTabId) {
-            setActiveTabId(newTabs[0].id);
-          }
-          setTabs(newTabs.map((t, idx) => ({ ...t, isActive: idx === 0 })));
+          handleTabClose(tabs[tabIndex].id);
         }
-        break;
-      }
-
-      case 'MARKET_VIEW': {
-        const marketApp = appRegistry.get('market-view');
-        if (marketApp) {
-          const newInstance: AppInstance = {
-            id: `app-${Date.now()}`,
-            appId: marketApp.id,
-            name: marketApp.name,
-          };
-          setIsLayoutLocked(true);
-          setTabs(prev => prev.map(tab => {
-            if (tab.id === activeTabId) {
-              // Add new app to existing apps
-              const updatedAppInstances = [...tab.appInstances, newInstance];
-              const newLayouts = calculateSmartLayouts(updatedAppInstances, tab.layouts);
-              
-              return {
-                ...tab,
-                appInstances: updatedAppInstances,
-                layouts: newLayouts,
-              };
-            }
-            return tab;
-          }));
-          setTimeout(() => setIsLayoutLocked(false), 100);
-        }
-        break;
-      }
-
-      case 'SETTINGS': {
-        const settingsApp = appRegistry.get('settings');
-        if (settingsApp) {
-          const newInstance: AppInstance = {
-            id: `app-${Date.now()}`,
-            appId: settingsApp.id,
-            name: settingsApp.name,
-          };
-          setIsLayoutLocked(true);
-          setTabs(prev => prev.map(tab => {
-            if (tab.id === activeTabId) {
-              // Add new app to existing apps
-              const updatedAppInstances = [...tab.appInstances, newInstance];
-              const newLayouts = calculateSmartLayouts(updatedAppInstances, tab.layouts);
-              
-              return {
-                ...tab,
-                appInstances: updatedAppInstances,
-                layouts: newLayouts,
-              };
-            }
-            return tab;
-          }));
-          setTimeout(() => setIsLayoutLocked(false), 100);
-        }
-        break;
-      }
-
-      case 'HELP': {
-        const helpApp = appRegistry.get('help');
-        if (helpApp) {
-          const newInstance: AppInstance = {
-            id: `app-${Date.now()}`,
-            appId: helpApp.id,
-            name: helpApp.name,
-          };
-          setIsLayoutLocked(true);
-          setTabs(prev => prev.map(tab => {
-            if (tab.id === activeTabId) {
-              // Add new app to existing apps
-              const updatedAppInstances = [...tab.appInstances, newInstance];
-              const newLayouts = calculateSmartLayouts(updatedAppInstances, tab.layouts);
-              
-              return {
-                ...tab,
-                appInstances: updatedAppInstances,
-                layouts: newLayouts,
-              };
-            }
-            return tab;
-          }));
-          setTimeout(() => setIsLayoutLocked(false), 100);
-        }
-        break;
-      }
-
-      case 'SAVE': {
-        if (parsed.args.length === 0) {
+      },
+      'SETTINGS': () => spawnApp('settings'),
+      'HELP': () => spawnApp('help'),
+      'SAVE': (args) => {
+        if (args.length === 0) {
           console.log('Usage: SAVE [view_name]');
           return;
         }
@@ -342,38 +267,36 @@ function App() {
           console.log('No active tab to save');
           return;
         }
-        
+
         // Filter minimized apps to only include those in the active tab
         const minimizedAppIds = Array.from(minimizedApps).filter(appId =>
           activeTab.appInstances.some(inst => inst.id === appId)
         );
-        
+
         const savedData: SavedTabData = {
           name: activeTab.name,
           appInstances: activeTab.appInstances,
           layouts: activeTab.layouts,
           minimizedAppIds,
         };
-        
+
         saveView(viewName, savedData);
         console.log(`View "${viewName}" saved successfully`);
-        break;
-      }
-
-      case 'LOAD_VIEW': {
-        if (parsed.args.length === 0) {
+      },
+      'LOAD_VIEW': (args) => {
+        if (args.length === 0) {
           console.log('Usage: LOAD VIEW [view_name]');
           return;
         }
         // Extract view name from original input to preserve case
         const viewName = parsed.raw.replace(/^load\s+view\s+/i, '').trim();
         const savedData = loadView(viewName);
-        
+
         if (!savedData) {
           console.log(`View "${viewName}" not found. Use LIST VIEWS to see available views.`);
           return;
         }
-        
+
         // Lock layout to prevent react-grid-layout from overwriting
         setIsLayoutLocked(true);
         setTabs(prev => prev.map(tab => {
@@ -387,7 +310,7 @@ function App() {
           }
           return tab;
         }));
-        
+
         // Restore minimized apps state
         setMinimizedApps(prev => {
           const newSet = new Set(prev);
@@ -407,62 +330,30 @@ function App() {
           });
           return newSet;
         });
-        
+
         setTimeout(() => setIsLayoutLocked(false), 100);
         console.log(`View "${viewName}" loaded successfully`);
-        break;
-      }
-
-      case 'LIST_VIEWS': {
-        const viewsApp = appRegistry.get('views');
-        if (viewsApp) {
-          const newInstance: AppInstance = {
-            id: `app-${Date.now()}`,
-            appId: viewsApp.id,
-            name: viewsApp.name,
-          };
-          setIsLayoutLocked(true);
-          setTabs(prev => prev.map(tab => {
-            if (tab.id === activeTabId) {
-              // Add new app to existing apps
-              const updatedAppInstances = [...tab.appInstances, newInstance];
-              const newLayouts = calculateSmartLayouts(updatedAppInstances, tab.layouts);
-              
-              return {
-                ...tab,
-                appInstances: updatedAppInstances,
-                layouts: newLayouts,
-              };
-            }
-            return tab;
-          }));
-          setTimeout(() => setIsLayoutLocked(false), 100);
-        }
-        break;
-      }
-
-      case 'UNKNOWN': {
+      },
+      'LIST_VIEWS': () => spawnApp('views'),
+      'UNKNOWN': () => {
         console.log(`Unknown command: "${parsed.raw}". Type HELP for available commands.`);
-        break;
       }
+    };
+
+    const handler = handlers[parsed.type];
+    if (handler) {
+      handler(parsed.args);
+    } else {
+      // Should match UNKNOWN if not found, but just in case
+      console.log(`Unknown command: "${parsed.raw}". Type HELP for available commands.`);
     }
-  }, [tabs, activeTabId]);
+
+  }, [tabs, activeTabId, handleNewTab, handleTabClose, minimizedApps, spawnApp]);
 
   const handleTabClick = useCallback((tabId: string) => {
     setTabs(prev => prev.map(t => ({ ...t, isActive: t.id === tabId })));
     setActiveTabId(tabId);
   }, []);
-
-  const handleTabClose = useCallback((tabId: string) => {
-    if (tabs.length <= 1) {
-      return;
-    }
-    const newTabs = tabs.filter(t => t.id !== tabId);
-    if (tabId === activeTabId) {
-      setActiveTabId(newTabs[0].id);
-    }
-    setTabs(newTabs.map((t, idx) => ({ ...t, isActive: idx === 0 })));
-  }, [tabs, activeTabId]);
 
   const handleTabRename = useCallback((tabId: string, newName: string) => {
     setTabs(prev => prev.map(t => t.id === tabId ? { ...t, name: newName } : t));
@@ -472,7 +363,7 @@ function App() {
     setTabs(prev => {
       const draggedIndex = prev.findIndex(t => t.id === draggedTabId);
       const targetIndex = prev.findIndex(t => t.id === targetTabId);
-      
+
       if (draggedIndex === -1 || targetIndex === -1 || draggedIndex === targetIndex) {
         return prev;
       }
@@ -480,7 +371,7 @@ function App() {
       const newTabs = [...prev];
       const [draggedTab] = newTabs.splice(draggedIndex, 1);
       newTabs.splice(targetIndex, 0, draggedTab);
-      
+
       return newTabs;
     });
   }, []);
@@ -500,7 +391,7 @@ function App() {
     // Store data in localStorage with a unique key (avoids URL length limits)
     const popoutKey = `popout-${tab.id}-${Date.now()}`;
     localStorage.setItem(popoutKey, JSON.stringify(tabData));
-    
+
     // Pass only the key in the URL
     const url = `${window.location.origin}${window.location.pathname}?popout=${popoutKey}`;
 
@@ -543,22 +434,12 @@ function App() {
     }
   }, [tabs, activeTabId]);
 
-  const handleNewTab = useCallback(() => {
-    const newTab: TabWithApps = {
-      id: `tab-${Date.now()}`,
-      name: `Tab ${tabs.length + 1}`,
-      isActive: false,
-      appInstances: [],
-      layouts: [],
-    };
-    setTabs(prev => prev.map(t => ({ ...t, isActive: false })).concat(newTab));
-    setActiveTabId(newTab.id);
-  }, [tabs.length]);
+
 
   const handleLayoutChange = useCallback((layouts: Layout[]) => {
     // Skip layout changes if we're programmatically updating layouts
     if (isLayoutLocked) return;
-    
+
     setTabs(prev => prev.map(tab => {
       if (tab.id === activeTabId) {
         // Update layouts, preserving minimized state
@@ -681,7 +562,7 @@ function App() {
           // Calculate full-screen layout for the moved app
           const availableHeight = Math.floor((window.innerHeight - 72) / 30);
           const fullHeight = Math.max(availableHeight, 20);
-          
+
           const newLayout: Layout = {
             i: appInstance!.id,
             x: 0,
@@ -689,7 +570,7 @@ function App() {
             w: 12, // Full width
             h: fullHeight, // Full height
           };
-          
+
           return {
             ...tab,
             appInstances: [appInstance!], // Replace, don't add
@@ -742,8 +623,8 @@ function App() {
       }
 
       // Ctrl+Tab / Cmd+Option+Right - Next tab
-      if ((ctrlOrCmd && e.key === 'Tab' && !e.shiftKey) || 
-          (isMac && e.metaKey && e.altKey && e.key === 'ArrowRight')) {
+      if ((ctrlOrCmd && e.key === 'Tab' && !e.shiftKey) ||
+        (isMac && e.metaKey && e.altKey && e.key === 'ArrowRight')) {
         e.preventDefault();
         const currentIndex = tabs.findIndex(t => t.id === activeTabId);
         const nextIndex = (currentIndex + 1) % tabs.length;
@@ -753,7 +634,7 @@ function App() {
 
       // Ctrl+Shift+Tab / Cmd+Option+Left - Previous tab
       if ((ctrlOrCmd && e.key === 'Tab' && e.shiftKey) ||
-          (isMac && e.metaKey && e.altKey && e.key === 'ArrowLeft')) {
+        (isMac && e.metaKey && e.altKey && e.key === 'ArrowLeft')) {
         e.preventDefault();
         const currentIndex = tabs.findIndex(t => t.id === activeTabId);
         const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length;
@@ -780,22 +661,22 @@ function App() {
     <div className="h-screen w-screen bloomberg-bg-black flex flex-col overflow-hidden">
       <CommandConsole onCommand={handleCommand} position="top" />
       <div style={{ position: 'fixed', top: '32px', left: 0, right: 0, zIndex: 40, backgroundColor: '#000000' }}>
-      <TabManager
-        tabs={tabManagerTabs}
-        activeTabId={activeTabId}
-        onTabClick={handleTabClick}
-        onTabClose={handleTabClose}
-        onTabRename={handleTabRename}
-        onNewTab={handleNewTab}
-        onTabDrop={handleTabDrop}
-        draggingAppId={draggingAppId}
-        onTabReorder={handleTabReorder}
-        onTabPopOut={handleTabPopOut}
-      />
+        <TabManager
+          tabs={tabManagerTabs}
+          activeTabId={activeTabId}
+          onTabClick={handleTabClick}
+          onTabClose={handleTabClose}
+          onTabRename={handleTabRename}
+          onNewTab={handleNewTab}
+          onTabDrop={handleTabDrop}
+          draggingAppId={draggingAppId}
+          onTabReorder={handleTabReorder}
+          onTabPopOut={handleTabPopOut}
+        />
       </div>
-      <div 
-        className="overflow-hidden bloomberg-bg-black" 
-        style={{ 
+      <div
+        className="overflow-hidden bloomberg-bg-black"
+        style={{
           marginTop: '72px',
           height: 'calc(100vh - 72px)',
           width: '100vw',
@@ -813,8 +694,8 @@ function App() {
             const AppComponent = app.component;
             const isMinimized = minimizedApps.has(instance.id);
             return (
-              <GridItem 
-                key={instance.id} 
+              <GridItem
+                key={instance.id}
                 id={instance.id}
                 appName={app.name}
                 isMinimized={isMinimized}

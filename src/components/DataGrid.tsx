@@ -11,8 +11,8 @@ interface DataGridProps {
   height?: string | number;
 }
 
-export const DataGrid = ({ 
-  rowData = [], 
+export const DataGrid = ({
+  rowData = [],
   columnDefs = [],
   gridOptions = {},
   height = '100%'
@@ -32,7 +32,7 @@ export const DataGrid = ({
     rowSelection: 'multiple',
     animateRows: false,
     // Bloomberg Terminal styling
-    getRowStyle: (params) => {
+    getRowStyle: (_params) => {
       return {
         backgroundColor: '#000000',
         color: '#FFFFFF',
@@ -46,9 +46,9 @@ export const DataGrid = ({
   }), [defaultColDef, gridOptions]);
 
   return (
-    <div 
+    <div
       className="ag-theme-alpine-dark bloomberg-bg-black"
-      style={{ 
+      style={{
         height: typeof height === 'number' ? `${height}px` : height,
         width: '100%',
       }}
