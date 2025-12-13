@@ -101,7 +101,14 @@ export const IrisAnalysisApp = () => {
                 {/* 3D Scatter Plot */}
                 <div className="border border-bloomberg-amber/30 p-2 rounded bg-zinc-900/30">
                     <h3 className="text-sm uppercase mb-2 pl-2 border-l-2 border-bloomberg-amber">3D Cluster Analysis</h3>
-                    <div className="h-[400px] w-full">
+                    <div
+                        className="h-[400px] w-full"
+                        onDragStart={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                        }}
+                        draggable={true}
+                    >
                         <Plot
                             className="w-full h-full"
                             data={scatter3DData}
@@ -125,7 +132,14 @@ export const IrisAnalysisApp = () => {
                 {/* 2D Scatter Plot */}
                 <div className="border border-bloomberg-amber/30 p-2 rounded bg-zinc-900/30">
                     <h3 className="text-sm uppercase mb-2 pl-2 border-l-2 border-bloomberg-amber">Sepal Length vs Petal Width</h3>
-                    <div className="h-[400px] w-full">
+                    <div
+                        className="h-[400px] w-full"
+                        onDragStart={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                        }}
+                        draggable={true}
+                    >
                         <Plot
                             className="w-full h-full"
                             data={scatterMatrixData}
